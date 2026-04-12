@@ -3,166 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>حقي | المنصة القانونية المتكاملة</title>
+    <title>حقي | Haqqi</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        :root { --primary: #0d2c1d; --accent: #f1c40f; --bg: #f4f7f6; }
-        body { font-family: system-ui; background: var(--bg); margin: 0; padding-bottom: 90px; }
-        .hero { background: var(--primary); color: white; padding: 30px 15px; text-align: center; border-bottom-left-radius: 30px; border-bottom-right-radius: 30px; }
-        .hero h1 { margin: 0; font-size: 2.2em; }
-        .hero p { opacity: 0.9; font-size: 0.9em; }
-        
-        .grid-cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 15px; margin-top: -20px; }
-        .card { background: white; border-radius: 12px; padding: 15px 5px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); cursor: pointer; border: 1px solid #eee; }
-        .card .icon { font-size: 1.8em; display: block; margin-bottom: 5px; }
-        
-        .chat-box { padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
-        .msg { padding: 15px; border-radius: 15px; max-width: 85%; font-size: 0.95em; line-height: 1.5; white-space: pre-wrap; }
-        .user { background: #e3f2fd; color: #0d47a1; align-self: flex-start; }
-        .bot { background: white; color: #333; box-shadow: 0 2px 5px rgba(0,0,0,0.05); align-self: flex-end; }
-        .action-btn { background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 20px; margin-top: 10px; cursor: pointer; font-size: 0.8em; }
-
-        .toolbar { position: fixed; bottom: 0; width: 100%; background: white; padding: 10px; box-sizing: border-box; display: flex; gap: 8px; align-items: center; box-shadow: 0 -2px 15px rgba(0,0,0,0.1); }
-        .toolbar input[type="text"] { flex: 1; border: 1px solid #ddd; background: #f9f9f9; padding: 12px; border-radius: 25px; outline: none; }
-        .icon-btn { background: #f1f3f4; border: none; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2em; cursor: pointer; color: #555; }
-        .send-btn { background: #27ae60; color: white; }
-        .mic-active { background: #e74c3c !important; color: white !important; animation: pulse 1.5s infinite; }
-        
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-        #file-input { display: none; }
+        :root { --primary: #1a4731; --secondary: #c5a059; --bg: #f8f9fa; }
+        body { font-family: system-ui; background: var(--bg); margin: 0; padding: 20px; }
+        .header { background: var(--primary); color: white; padding: 30px; border-radius: 15px; text-align: center; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 15px; }
+        .card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; }
+        .card i { font-size: 24px; color: var(--secondary); margin-bottom: 10px; }
+        .chat-box { background: white; padding: 20px; border-radius: 15px; margin-top: 20px; min-height: 100px; border: 1px solid #eee; }
+        .error { color: #dc3545; background: #fff5f5; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
-
-    <div class="hero">
-        <h1>⚖️ حقي</h1>
+    <div class="header">
+        <i class="fas fa-balance-scale" style="font-size: 40px; color: var(--secondary);"></i>
+        <h1>حقي</h1>
         <p>مستشارك القانوني - مدعوم بالذكاء الاصطناعي</p>
     </div>
 
-    <div class="grid-cats">
-        <div class="card" onclick="autoTrain('إقامة', 'Ley de Extranjería')"><span class="icon">🛂</span>إقامة</div>
-        <div class="card" onclick="autoTrain('عمل', 'Estatuto de los Trabajadores')"><span class="icon">💼</span>عمل</div>
-        <div class="card" onclick="autoTrain('إيجار', 'Ley de Arrendamientos Urbanos')"><span class="icon">🏠</span>إيجار</div>
+    <div class="grid">
+        <div class="card" onclick="askQuestion('إقامة')"><i class="fas fa-id-card"></i><div>إقامة</div></div>
+        <div class="card" onclick="askQuestion('عمل')"><i class="fas fa-briefcase"></i><div>عمل</div></div>
+        <div class="card" onclick="askQuestion('إيجار')"><i class="fas fa-home"></i><div>إيجار</div></div>
     </div>
 
-    <div id="chat" class="chat-box"></div>
-
-    <div class="toolbar">
-        <button class="icon-btn" onclick="document.getElementById('file-input').click()">📷</button>
-        <input type="file" id="file-input" accept="image/*" onchange="uploadImage(this)">
-        
-        <button class="icon-btn" id="mic-btn" onclick="toggleVoice()">🎙️</button>
-        
-        <input type="text" id="question" placeholder="اسأل، صور، أو اطلب رسالة...">
-        <button class="icon-btn send-btn" onclick="ask()">➤</button>
-    </div>
+    <div id="error-msg" class="error">❌ خطأ في الاتصال بالسيرفر.</div>
+    <div id="response" class="chat-box">اختر قسماً أو اطرح سؤالك...</div>
 
     <script>
-        const chat = document.getElementById('chat');
-        let recognition;
+        async function askQuestion(topic) {
+            const resBox = document.getElementById('response');
+            const errorBox = document.getElementById('error-msg');
+            resBox.innerText = 'جاري جلب المعلومات...';
+            errorBox.style.display = 'none';
 
-        // تهيئة التعرف على الصوت
-        if ('webkitSpeechRecognition' in window) {
-            recognition = new webkitSpeechRecognition();
-            recognition.lang = 'ar-MA'; // الدارجة/العربية
-            recognition.continuous = false;
-            
-            recognition.onresult = function(event) {
-                document.getElementById('question').value = event.results[0][0].transcript;
-                toggleVoice(false);
-                ask();
-            };
-            recognition.onerror = () => toggleVoice(false);
-            recognition.onend = () => toggleVoice(false);
-        }
-
-        function toggleVoice(forceStop = false) {
-            const btn = document.getElementById('mic-btn');
-            if (forceStop || btn.classList.contains('mic-active')) {
-                recognition.stop();
-                btn.classList.remove('mic-active');
-            } else {
-                recognition.start();
-                btn.classList.add('mic-active');
+            try {
+                // الاتصال بمسار Vercel Serverless Function الجديد
+                const response = await fetch('/api/index/ask?question=' + encodeURIComponent(topic));
+                if (!response.ok) throw new Error();
+                const data = await response.json();
+                resBox.innerText = data.answer || data.response;
+            } catch (err) {
+                errorBox.style.display = 'block';
+                resBox.innerText = '';
             }
-        }
-
-        function addMsg(text, type) {
-            const div = document.createElement('div');
-            div.className = 'msg ' + type;
-            div.innerHTML = text;
-            chat.appendChild(div);
-            window.scrollTo(0, document.body.scrollHeight);
-        }
-
-        function speak(text) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'ar-SA';
-            window.speechSynthesis.speak(utterance);
-        }
-
-        async function autoTrain(name, query) {
-            addMsg('<i>جاري جلب تحديثات قسم ' + name + ' من الجريدة الرسمية...</i>', 'bot');
-            try {
-                await fetch('http://localhost:8080/auto_train', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: 'employee_id=string&topic=' + encodeURIComponent(query)
-                });
-                addMsg('✅ تم تحديث قسم ' + name + ' بنجاح وأنا مستعد للإجابة.', 'bot');
-            } catch (e) { addMsg('❌ خطأ في الاتصال بالسيرفر.', 'bot'); }
-        }
-
-        async function ask() {
-            const input = document.getElementById('question');
-            if(!input.value) return;
-            const q = input.value;
-            addMsg(q, 'user');
-            input.value = '';
-
-            // إذا كان السؤال يتعلق بكتابة رسالة/شكوى
-            if(q.includes('اكتب') || q.includes('شكوى') || q.includes('رسالة')) {
-                generateDocument(q);
-                return;
-            }
-
-            try {
-                const res = await fetch('http://localhost:8080/ask?employee_id=string&question=' + encodeURIComponent(q));
-                const data = await res.json();
-                addMsg(data.answer, 'bot');
-                speak(data.answer); // نطق الإجابة
-            } catch (e) { addMsg('خطأ في السيرفر', 'bot'); }
-        }
-
-        async function uploadImage(input) {
-            if(!input.files[0]) return;
-            addMsg('📷 تم إرفاق صورة، جاري تحليلها قانونياً...', 'user');
-            
-            const formData = new FormData();
-            formData.append('file', input.files[0]);
-
-            try {
-                const res = await fetch('http://localhost:8080/analyze_doc', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
-                addMsg("<b>التحليل القانوني للوثيقة:</b><br>" + data.answer, 'bot');
-                speak("تم تحليل الوثيقة، يرجى قراءة التفاصيل.");
-            } catch (e) { addMsg('فشل في قراءة الصورة', 'bot'); }
-        }
-
-        async function generateDocument(topic) {
-            addMsg('📝 جاري صياغة المستند القانوني...', 'bot');
-            try {
-                const res = await fetch('http://localhost:8080/generate_form', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: 'topic=' + encodeURIComponent(topic)
-                });
-                const data = await res.json();
-                const docHtml = data.document + '<br><button class="action-btn" onclick="window.print()">🖨️ طباعة المستند</button>';
-                addMsg(docHtml, 'bot');
-            } catch (e) { addMsg('فشل في صياغة المستند', 'bot'); }
         }
     </script>
 </body>
