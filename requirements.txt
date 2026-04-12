@@ -2,4 +2,7 @@ fastapi
 openai
 pinecone-client
 python-multipart
-uvicorn
+langchain
+langchain-openai
+langchain-pinecone
+python-dotenv
