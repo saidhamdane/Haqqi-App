@@ -3,62 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>حقي AI | المستشار القانوني العالمي</title>
+    <title>حقي AI | المستشار القانوني الشامل</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        :root { --primary: #0a2e1f; --secondary: #b6914d; --bg: #f8f9fa; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        .nav { background: var(--primary); color: white; padding: 15px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-        .nav h1 { margin: 0; font-size: 22px; color: var(--secondary); }
-        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .msg { max-width: 85%; padding: 12px 18px; border-radius: 20px; font-size: 15px; line-height: 1.6; position: relative; animation: fadeIn 0.3s ease; }
-        .ai { background: white; align-self: flex-start; border-right: 5px solid var(--secondary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .user { background: var(--primary); color: white; align-self: flex-end; border-bottom-left-radius: 2px; }
-        .copy-btn { font-size: 12px; color: var(--secondary); cursor: pointer; margin-top: 8px; display: inline-block; border: 1px solid var(--secondary); padding: 2px 8px; border-radius: 10px; }
-        .input-bar { background: white; padding: 15px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
-        input { flex: 1; border: 1px solid #eee; padding: 12px 20px; border-radius: 25px; outline: none; background: #f1f3f4; }
-        .send-btn { background: var(--secondary); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        :root { --primary: #0a2e1f; --secondary: #b6914d; --bg: #f8fcf9; --card-bg: #ffffff; }
+        body { font-family: 'Segoe UI', system-ui; background: var(--bg); margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden;}
+        
+        /* الهيدر الفخم الجديد */
+        .nav { background: var(--primary); color: white; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 5px 20px rgba(0,0,0,0.2); z-index: 100; }
+        .nav h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--secondary); letter-spacing: 1px;}
+        
+        /* منطقة لوحة التحكم (Cards) */
+        #dashboard { flex: 1; overflow-y: auto; padding: 25px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; animation: fadeIn 0.5s ease; }
+        .legal-card { background: var(--card-bg); border-radius: 18px; padding: 20px; text-align: center; border: 1px solid #eee; box-shadow: 0 4px 15px rgba(0,0,0,0.03); transition: 0.3s; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center;}
+        .legal-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.08); border-color: var(--secondary); }
+        .legal-card i { font-size: 32px; color: var(--secondary); margin-bottom: 12px; opacity: 0.8;}
+        .legal-card h2 { margin: 0; font-size: 16px; color: var(--primary); font-weight: 700;}
+        .legal-card p { margin: 5px 0 0; font-size: 11px; color: #777; line-height: 1.4; opacity: 0;}
+        .legal-card:hover p { opacity: 1;}
+
+        /* منطقة الدردشة (مخفية في البداية) */
+        #chat-mode { display: none; flex: 1; flex-direction: column; background: var(--bg); }
+        #chat-history { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth;}
+        
+        /* تصميم الفقاعات الفخم (Luxury Legal) */
+        .bubble { max-width: 85%; padding: 14px 20px; border-radius: 20px; font-size: 15px; line-height: 1.6; position: relative; animation: slideUp 0.3s ease; }
+        .ai { background: white; align-self: flex-start; border-right: 5px solid var(--secondary); border-bottom-right-radius: 4px; box-shadow: 0 10px 25px rgba(0,0,0,0.04); color: #333;}
+        .user { background: var(--primary); color: white; align-self: flex-end; border-bottom-left-radius: 4px;}
+        
+        /* بار الإدخال المطور (الوسائط المتعددة) */
+        .input-bar { background: white; padding: 15px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #eee; box-shadow: 0 -5px 15px rgba(0,0,0,0.02); }
+        input { flex: 1; border: none; padding: 12px 18px; border-radius: 25px; background: #f0f2f5; outline: none; font-size: 16px; }
+        
+        .action-btn { background: none; border: none; font-size: 22px; cursor: pointer; transition: 0.2s; color: var(--primary); opacity: 0.7; }
+        .action-btn:hover { color: var(--secondary); transform: scale(1.1); opacity: 1; }
+        
+        .typing { font-size: 12px; color: var(--secondary); margin: 0 20px 5px; display: none; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <div class="nav"><h1>⚖️ حقي AI</h1></div>
-    <div id="chat">
-        <div class="msg ai">مرحباً بك. أنا "حقي"، مستشارك القانوني العالمي. اسألني عن أي شيء يخص قوانين إسبانيا بالدارجة.</div>
+    <div class="nav">
+        <h1>⚖️ حقي AI</h1>
+        <i class="fas fa-arrow-left action-btn" id="back-btn" style="display:none; color:white;" onclick="backToDashboard()"></i>
     </div>
-    <div class="input-bar">
-        <input type="text" id="userInput" placeholder="اكتب سؤالك هنا..." onkeypress="if(event.key==='Enter') send()">
-        <button class="send-btn" onclick="send()"><i class="fas fa-paper-plane"></i></button>
+
+    <div id="dashboard">
+        <div class="legal-card" onclick="startChat('الإقامة والوثائق', 'fas fa-id-card')">
+            <i class="fas fa-id-card"></i>
+            <h2>الإقامة</h2>
+            <p>التجديد، الدفع، الرفض...</p>
+        </div>
+        <div class="legal-card" onclick="startChat('عقود الشغل والحقوق', 'fas fa-briefcase')">
+            <i class="fas fa-briefcase"></i>
+            <h2>العمل</h2>
+            <p>الساعات، الأجور، الفصل...</p>
+        </div>
+        <div class="legal-card" onclick="startChat('السكن والإيجار', 'fas fa-home')">
+            <i class="fas fa-home"></i>
+            <h2>السكن</h2>
+            <p>العقود، الدفع، المشاكل...</p>
+        </div>
+        <div class="legal-card" onclick="startChat('الجنسية والاندماج', 'fas fa-passport')">
+            <i class="fas fa-passport"></i>
+            <h2>الجنسية</h2>
+            <p>الشروط، الامتحان، التقديم...</p>
+        </div>
+        <div class="legal-card" onclick="startChat('الأسرة والترابط العائلي', 'fas fa-users')">
+            <i class="fas fa-users"></i>
+            <h2>الأسرة</h2>
+            <p>الفيزا، الشمل، الطلاق...</p>
+        </div>
+        <div class="legal-card" onclick="startChat('تحليل وثيقة قانونية', 'fas fa-file-contract')">
+            <i class="fas fa-file-contract"></i>
+            <h2>تحليل وثيقة</h2>
+            <p>صور عقدك أو قرارك للتحليل...</p>
+        </div>
+    </div>
+
+    <div id="chat-mode">
+        <div id="chat-history"></div>
+        <div id="typing" class="typing">جاري تحليل الأنظمة القانونية...</div>
+        <div class="input-bar">
+            <button class="action-btn" id="voice-btn" title="تحدث بالدارجة"><i class="fas fa-microphone"></i></button>
+            <button class="action-btn" id="camera-btn" title="صور وثيقة للتحليل"><i class="fas fa-camera"></i></button>
+            <input type="text" id="userInput" placeholder="اسأل أي سؤال قانوني...">
+            <button class="action-btn" onclick="send()" title="إرسال"><i class="fas fa-paper-plane"></i></button>
+        </div>
     </div>
 
     <script>
+        const chat = document.getElementById('chat-history');
+        const input = document.getElementById('userInput');
+        const status = document.getElementById('typing');
+        const dashboard = document.getElementById('dashboard');
+        const chatMode = document.getElementById('chat-mode');
+        const backBtn = document.getElementById('back-btn');
+
+        function startChat(field, icon) {
+            dashboard.style.display = 'none';
+            chatMode.style.display = 'flex';
+            backBtn.style.display = 'block';
+            chat.innerHTML = '<div class="msg ai"><i class="'+icon+'" style="margin-left: 10px; color: var(--secondary)"></i> مرحباً بك. اخترت مجال **'+field+'**. أنا حقي، مستشارك القانوني الشامل. كيف أساعدك اليوم بخصوص هذا المجال بالدارجة؟</div>';
+        }
+
+        function backToDashboard() {
+            dashboard.style.display = 'grid';
+            chatMode.style.display = 'none';
+            backBtn.style.display = 'none';
+        }
+
         async function send() {
-            const input = document.getElementById('userInput');
-            const chat = document.getElementById('chat');
-            if(!input.value.trim()) return;
-
-            const text = input.value;
-            chat.innerHTML += '<div class="msg user">' + text + '</div>';
+            const text = input.value.trim();
+            if(!text) return;
+            appendMsg(text, 'user');
             input.value = '';
-            chat.scrollTop = chat.scrollHeight;
-
+            status.style.display = 'block';
             try {
                 const response = await fetch('/api/index/ask?question=' + encodeURIComponent(text));
                 const data = await response.json();
-                const answer = data.answer || "عذراً، وقع خطأ.";
-                const aiMsg = document.createElement('div');
-                aiMsg.className = 'msg ai';
-                aiMsg.innerHTML = answer.replace(/\n/g, '<br>') + '<br><span class="copy-btn" onclick="copyText(`'+answer.replace(/'/g, "\'")+'`)"><i class="far fa-copy"></i> نسخ الاستشارة</span>';
-                chat.appendChild(aiMsg);
-                chat.scrollTop = chat.scrollHeight;
-            } catch (err) {
-                chat.innerHTML += '<div class="msg ai">عذراً، حاول مرة أخرى.</div>';
+                status.style.display = 'none';
+                appendMsg(data.answer, 'ai');
+            } catch (e) {
+                status.style.display = 'none';
+                appendMsg("سمح ليا، كاين مشكل فالسيرفر. حاول مرة أخرى.", 'ai');
             }
         }
-        function copyText(text) {
-            navigator.clipboard.writeText(text);
-            alert("تم نسخ الاستشارة القانونية!");
+
+        function appendMsg(text, type) {
+            const div = document.createElement('div');
+            div.className = 'bubble ' + type;
+            div.innerHTML = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong></strong>');
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
         }
+
+        // تفعيل ميزة التعرف على الصوت (STT) بالدارجة
+        if ('webkitSpeechRecognition' in window) {
+            const recognition = new webkitSpeechRecognition();
+            recognition.lang = 'ar-MA'; // الدارجة المغربية
+            document.getElementById('voice-btn').onclick = () => {
+                recognition.start();
+                status.innerHTML = "جاري استماع...";
+                status.style.display = 'block';
+            };
+            recognition.onresult = (event) => {
+                input.value = event.results[0][0].transcript;
+                send();
+            };
+        }
+
+        // تفعيل ميزة قراءة النص (TTS) - (هذا يحتاج لتعديل الكود الخلفي، سنفعله في الواجهة الآن)
+        // (سنقوم بإضافة منطق القراءة داخل appendMsg مستقبلاً)
+
+        // تفعيل الكاميرا (لن نتمكن من تفعيلها برمجياً هنا، لكننا أعددنا الواجهة)
+        document.getElementById('camera-btn').onclick = () => {
+            alert("ميزة تحليل الوثائق بالكاميرا قيد التطوير. قريباً، ستتمكن من تصوير أي وثيقة وتحليلها قانونياً!");
+        };
     </script>
 </body>
 </html>
