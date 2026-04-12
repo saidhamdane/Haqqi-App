@@ -8,35 +8,30 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index = pc.Index(os.getenv("INDEX_NAME"))
 
 @app.get("/api/index/ask")
 async def ask(question: str):
     try:
-        # 1. تحويل السؤال إلى Vector
-        res = client.embeddings.create(input=[question], model="text-embedding-3-small")
-        query_vector = res.data[0].embedding
-
-        # 2. البحث في Pinecone عن أدلة قانونية
-        search_res = index.query(vector=query_vector, top_k=3, include_metadata=True)
+        # محاولة البحث في الوثائق القانونية أولاً (Pinecone)
         context = ""
-        for match in search_res['matches']:
-            context += match['metadata']['text'] + "\n"
+        try:
+            pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+            index = pc.Index(os.getenv("INDEX_NAME"))
+            res = client.embeddings.create(input=[question], model="text-embedding-3-small")
+            search_res = index.query(vector=res.data[0].embedding, top_k=2, include_metadata=True)
+            context = "\n".join([m['metadata']['text'] for m in search_res['matches']])
+        except:
+            context = "استخدم معلوماتك العامة عن القانون الإسباني."
 
-        # 3. صياغة الرد النهائي
+        # صياغة الرد بشخصية 'حقي'
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": f"أنت 'حقي'، المحامي الرقمي الأكثر دقة في إسبانيا. استخدم المعلومات التالية للرد بالدارجة المغربية: {context}"},
+                {"role": "system", "content": f"أنت 'حقي' خبير قانوني في إسبانيا. أجب بالدارجة المغربية. استند لهذه المعلومات: {context}"},
                 {"role": "user", "content": question}
-            ]
+            ],
+            temperature=0.6
         )
         return {"answer": response.choices[0].message.content}
-    except:
-        # Fallback في حال فشل البحث في الوثائق
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": "رد بالدارجة المغربية كمحامي خبير في إسبانيا."}, {"role": "user", "content": question}]
-        )
-        return {"answer": response.choices[0].message.content}
+    except Exception as e:
+        return {"answer": "سمح ليا، كاين مشكل تقني بسيط. حاول تسولني بطريقة أخرى أو عاود من بعد شوية."}
