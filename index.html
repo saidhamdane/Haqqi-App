@@ -8,46 +8,66 @@
     <style>
         :root { --primary: #1a4731; --secondary: #c5a059; --bg: #f8f9fa; }
         body { font-family: system-ui; background: var(--bg); margin: 0; padding: 20px; }
-        .header { background: var(--primary); color: white; padding: 30px; border-radius: 15px; text-align: center; margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 15px; }
-        .card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; }
-        .card i { font-size: 24px; color: var(--secondary); margin-bottom: 10px; }
-        .chat-box { background: white; padding: 20px; border-radius: 15px; margin-top: 20px; min-height: 100px; border: 1px solid #eee; }
-        .error { color: #dc3545; background: #fff5f5; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; }
+        .header { background: var(--primary); color: white; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+        .card { background: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; border: 1px solid #eee; }
+        .card i { font-size: 20px; color: var(--secondary); display: block; margin-bottom: 5px; }
+        .card span { font-size: 14px; font-weight: bold; color: #333; }
+        .chat-box { background: white; padding: 20px; border-radius: 15px; min-height: 150px; border: 1px solid #ddd; position: relative; }
+        #response { line-height: 1.6; color: #444; }
+        .loading { display: none; color: var(--secondary); font-weight: bold; text-align: center; }
+        .error-msg { color: #dc3545; display: none; text-align: center; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <i class="fas fa-balance-scale" style="font-size: 40px; color: var(--secondary);"></i>
-        <h1>حقي</h1>
-        <p>مستشارك القانوني - مدعوم بالذكاء الاصطناعي</p>
+        <i class="fas fa-balance-scale" style="font-size: 30px; color: var(--secondary);"></i>
+        <h2 style="margin: 10px 0 5px;">حقي</h2>
+        <p style="margin: 0; font-size: 12px; opacity: 0.8;">مستشارك القانوني بالذكاء الاصطناعي</p>
     </div>
 
     <div class="grid">
-        <div class="card" onclick="askQuestion('إقامة')"><i class="fas fa-id-card"></i><div>إقامة</div></div>
-        <div class="card" onclick="askQuestion('عمل')"><i class="fas fa-briefcase"></i><div>عمل</div></div>
-        <div class="card" onclick="askQuestion('إيجار')"><i class="fas fa-home"></i><div>إيجار</div></div>
+        <div class="card" onclick="askAI('قوانين الإقامة في إسبانيا بالدارجة المغربية')">
+            <i class="fas fa-id-card"></i><span>إقامة</span>
+        </div>
+        <div class="card" onclick="askAI('قوانين العمل في إسبانيا بالدارجة المغربية')">
+            <i class="fas fa-briefcase"></i><span>عمل</span>
+        </div>
+        <div class="card" onclick="askAI('قوانين الإيجار والسكن في إسبانيا بالدارجة')">
+            <i class="fas fa-home"></i><span>إيجار</span>
+        </div>
     </div>
 
-    <div id="error-msg" class="error">❌ خطأ في الاتصال بالسيرفر.</div>
-    <div id="response" class="chat-box">اختر قسماً أو اطرح سؤالك...</div>
+    <div class="chat-box">
+        <div id="loading" class="loading"><i class="fas fa-spinner fa-spin"></i> جاري استشارة المحامي الرقمي...</div>
+        <div id="response">مرحباً بك! اختر قسماً أعلاه للحصول على استشارة قانونية فورية بالدارجة.</div>
+        <div id="error" class="error-msg">❌ فشل الاتصال. تأكد من إعداد API Key في Vercel.</div>
+    </div>
 
     <script>
-        async function askQuestion(topic) {
-            const resBox = document.getElementById('response');
-            const errorBox = document.getElementById('error-msg');
-            resBox.innerText = 'جاري جلب المعلومات...';
-            errorBox.style.display = 'none';
+        async function askAI(prompt) {
+            const resDiv = document.getElementById('response');
+            const loader = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            
+            resDiv.style.opacity = '0.3';
+            loader.style.display = 'block';
+            errorDiv.style.display = 'none';
 
             try {
-                // الاتصال بمسار Vercel Serverless Function الجديد
-                const response = await fetch('/api/index/ask?question=' + encodeURIComponent(topic));
-                if (!response.ok) throw new Error();
+                const response = await fetch('/api/index/ask?question=' + encodeURIComponent(prompt));
                 const data = await response.json();
-                resBox.innerText = data.answer || data.response;
+                
+                if (data.answer || data.response) {
+                    resDiv.innerText = data.answer || data.response;
+                } else {
+                    throw new Error();
+                }
             } catch (err) {
-                errorBox.style.display = 'block';
-                resBox.innerText = '';
+                errorDiv.style.display = 'block';
+            } finally {
+                loader.style.display = 'none';
+                resDiv.style.opacity = '1';
             }
         }
     </script>
