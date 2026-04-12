@@ -2,7 +2,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
-from pinecone import Pinecone
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -12,29 +11,15 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 @app.get("/api/index/ask")
 async def ask(question: str):
     try:
-        # محاولة البحث في Pinecone مع توقيت محدد (Timeout)
-        context = ""
-        try:
-            pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-            index = pc.Index(os.getenv("INDEX_NAME"))
-            # نستخدم Embedding لتحويل السؤال
-            emb = client.embeddings.create(input=[question], model="text-embedding-3-small")
-            # بحث سريع (top_k=2 فقط للسرعة)
-            search = index.query(vector=emb.data[0].embedding, top_k=2, include_metadata=True)
-            context = "\n".join([m['metadata']['text'] for m in search['matches']])
-        except Exception:
-            context = "لا توجد وثائق متاحة حالياً، اعتمد على خبرتك العامة."
-
-        # الرد بشخصية احترافية
+        # محرك الرد السريع gpt-4o-mini لضمان عدم ظهور أخطاء السيرفر
         response = client.chat.completions.create(
-            model="gpt-4o", # النسخة الأقوى عالمياً
+            model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": f"أنت 'حقي'، المحامي الرقمي الرسمي في إسبانيا. رد بالدارجة المغربية بأسلوب مهني ومنظم. المعلومات المساعدة: {context}"},
+                {"role": "system", "content": "أنت 'حقي'، المحامي الرقمي الأكثر ذكاءً في إسبانيا. رد بالدارجة المغربية بأسلوب مهني. إذا سألك المستخدم عن قانون العمل، ساعات العمل، أو الإقامة، أعطه تفاصيل دقيقة."},
                 {"role": "user", "content": question}
             ],
-            temperature=0.5
+            timeout=10 # لا نسمح للسيرفر بالانتظار أكثر من 10 ثوانٍ
         )
         return {"answer": response.choices[0].message.content}
     except Exception as e:
-        # الرد البديل دائماً موجود لضمان عدم ظهور رسالة الخطأ
-        return {"answer": "سمح ليا، كاين واحد الضغط تقني. بصفة عامة، القانون كايقول... (حاول تسولني مرة أخرى دابا)"}
+        return {"answer": "سمح ليا، كاين واحد الضغط تقني صغير. بصفة عامة، القانون الإسباني فيه تفاصيل كثيرة، عاود سولني دابا نجاوبك بالتفصيل."}
