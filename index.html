@@ -3,71 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>حقي | Haqqi</title>
+    <title>حقي | المستشار القانوني الذكي</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        :root { --primary: #1a4731; --secondary: #c5a059; --bg: #f8f9fa; }
-        body { font-family: system-ui; background: var(--bg); margin: 0; padding: 20px; }
-        .header { background: var(--primary); color: white; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
-        .card { background: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; border: 1px solid #eee; }
-        .card i { font-size: 20px; color: var(--secondary); display: block; margin-bottom: 5px; }
-        .card span { font-size: 14px; font-weight: bold; color: #333; }
-        .chat-box { background: white; padding: 20px; border-radius: 15px; min-height: 150px; border: 1px solid #ddd; position: relative; }
-        #response { line-height: 1.6; color: #444; }
-        .loading { display: none; color: var(--secondary); font-weight: bold; text-align: center; }
-        .error-msg { color: #dc3545; display: none; text-align: center; margin-top: 10px; }
+        :root { --primary: #1a4731; --secondary: #c5a059; --accent: #ffd700; --bg: #f0f2f5; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        .nav { background: var(--primary); color: white; padding: 15px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); position: sticky; top: 0; z-index: 100; }
+        .nav h1 { margin: 0; font-size: 24px; letter-spacing: 1px; }
+        
+        .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        
+        .bubble { max-width: 85%; padding: 12px 18px; border-radius: 20px; font-size: 15px; line-height: 1.6; position: relative; animation: fadeIn 0.3s ease; }
+        .ai-bubble { background: white; color: #333; align-self: flex-start; border-bottom-right-radius: 2px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid var(--secondary); }
+        .user-bubble { background: var(--primary); color: white; align-self: flex-end; border-bottom-left-radius: 2px; }
+        
+        .input-area { background: white; padding: 15px; display: flex; gap: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        input { flex: 1; border: 1px solid #ddd; padding: 12px; border-radius: 25px; outline: none; font-size: 16px; transition: 0.3s; }
+        input:focus { border-color: var(--secondary); }
+        
+        button { background: var(--secondary); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center; }
+        button:hover { transform: scale(1.1); background: var(--primary); }
+        
+        .typing { display: none; font-style: italic; font-size: 12px; color: #777; margin-bottom: 5px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <div class="header">
-        <i class="fas fa-balance-scale" style="font-size: 30px; color: var(--secondary);"></i>
-        <h2 style="margin: 10px 0 5px;">حقي</h2>
-        <p style="margin: 0; font-size: 12px; opacity: 0.8;">مستشارك القانوني بالذكاء الاصطناعي</p>
+    <div class="nav">
+        <h1><i class="fas fa-gavel"></i> حقي <span>AI</span></h1>
+        <small>مستشارك القانوني في جيبك</small>
     </div>
 
-    <div class="grid">
-        <div class="card" onclick="askAI('قوانين الإقامة في إسبانيا بالدارجة المغربية')">
-            <i class="fas fa-id-card"></i><span>إقامة</span>
-        </div>
-        <div class="card" onclick="askAI('قوانين العمل في إسبانيا بالدارجة المغربية')">
-            <i class="fas fa-briefcase"></i><span>عمل</span>
-        </div>
-        <div class="card" onclick="askAI('قوانين الإيجار والسكن في إسبانيا بالدارجة')">
-            <i class="fas fa-home"></i><span>إيجار</span>
-        </div>
+    <div class="chat-container" id="chat">
+        <div class="bubble ai-bubble">السلام عليكم! أنا مستشارك القانوني الذكي. كيف يمكنني مساعدتك اليوم بخصوص قوانين إسبانيا بالدارجة؟</div>
     </div>
 
-    <div class="chat-box">
-        <div id="loading" class="loading"><i class="fas fa-spinner fa-spin"></i> جاري استشارة المحامي الرقمي...</div>
-        <div id="response">مرحباً بك! اختر قسماً أعلاه للحصول على استشارة قانونية فورية بالدارجة.</div>
-        <div id="error" class="error-msg">❌ فشل الاتصال. تأكد من إعداد API Key في Vercel.</div>
+    <div id="typing" class="typing" style="padding: 0 20px;">المحامي الرقمي يكتب الآن...</div>
+
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="اسأل عن الإقامة، العمل، أو الجنسية..." onkeypress="if(event.key==='Enter') sendMessage()">
+        <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
     </div>
 
     <script>
-        async function askAI(prompt) {
-            const resDiv = document.getElementById('response');
-            const loader = document.getElementById('loading');
-            const errorDiv = document.getElementById('error');
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const chat = document.getElementById('chat');
+            const typing = document.getElementById('typing');
+            if(!input.value.trim()) return;
+
+            const userMsg = input.value;
+            chat.innerHTML += '<div class="bubble user-bubble">' + userMsg + '</div>';
+            input.value = '';
+            chat.scrollTop = chat.scrollHeight;
             
-            resDiv.style.opacity = '0.3';
-            loader.style.display = 'block';
-            errorDiv.style.display = 'none';
+            typing.style.display = 'block';
 
             try {
-                const response = await fetch('/api/index/ask?question=' + encodeURIComponent(prompt));
+                const response = await fetch('/api/index/ask?question=' + encodeURIComponent(userMsg));
                 const data = await response.json();
+                typing.style.display = 'none';
                 
-                if (data.answer || data.response) {
-                    resDiv.innerText = data.answer || data.response;
-                } else {
-                    throw new Error();
-                }
+                let answer = data.answer || data.response || "عذراً، وقع خطأ ما.";
+                chat.innerHTML += '<div class="bubble ai-bubble">' + answer.replace(/\n/g, '<br>') + '</div>';
+                chat.scrollTop = chat.scrollHeight;
             } catch (err) {
-                errorDiv.style.display = 'block';
-            } finally {
-                loader.style.display = 'none';
-                resDiv.style.opacity = '1';
+                typing.style.display = 'none';
+                chat.innerHTML += '<div class="bubble ai-bubble" style="border-left-color: red;">وقع خطأ في الاتصال. جرب مرة أخرى.</div>';
             }
         }
     </script>

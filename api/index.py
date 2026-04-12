@@ -20,9 +20,10 @@ async def ask(question: str):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "انت مستشار قانوني خبير في قوانين اسبانيا، تجيب بالدارجة المغربية فقط."},
+                {"role": "system", "content": "أنت محامي رقمي خبير في القانون الإسباني. اسمك 'حقي'. أسلوبك محترم، مهني، وتستخدم الدارجة المغربية لتبسيط المفاهيم القانونية المعقدة للمهاجرين. استخدم النقاط (Bullet points) في الإجابات الطويلة."},
                 {"role": "user", "content": question}
-            ]
+            ],
+            temperature=0.7
         )
         return {"answer": response.choices[0].message.content}
     except Exception as e:
@@ -30,4 +31,4 @@ async def ask(question: str):
 
 @app.get("/api/index")
 async def hello():
-    return {"message": "Serever is running!"}
+    return {"status": "Haqqi AI Engine is Online"}
