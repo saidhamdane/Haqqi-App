@@ -18,7 +18,7 @@ logger = logging.getLogger("haqqi.rag")
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Haqqi RAG API", version="2.0.0")
+app = FastAPI(title="Haqqi RAG API", version="2.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,9 +38,11 @@ BOE_SEARCH_URL = "https://www.boe.es/buscar/ayudas/legislacion_xml.php"
 BOE_DOC_URL = "https://www.boe.es/diario_boe/xml.php"
 
 # Total upper bound well under Vercel's 10 second limit.
-BOE_SEARCH_TIMEOUT = 3.5       # seconds
-BOE_DOC_TIMEOUT = 3.5          # seconds
-OPENAI_TIMEOUT = 8.0           # seconds
+# Stage budget: keywords (1.5) + search (2.0) + docs parallel (2.0) + final LLM (4.5)
+KEYWORD_TIMEOUT = 1.5          # seconds, very tight for the extractor
+BOE_SEARCH_TIMEOUT = 2.0       # seconds
+BOE_DOC_TIMEOUT = 2.5          # seconds
+OPENAI_TIMEOUT = 5.0           # seconds for the final Darija generation
 MAX_DOCS = 2                   # number of BOE documents to retrieve for context
 MAX_CONTEXT_CHARS = 6000       # hard cap on context length passed to the LLM
 
@@ -48,6 +50,22 @@ FALLBACK_MESSAGE = (
     "سمح ليا، الخدمة ديال BOE.es كاتعطي مشاكل دابا أو كاتأخر بزاف. "
     "عاود حاول من بعد شوية، و إلا بغيتي جواب سريع حاول تكون بلاصة السؤال ديالك أوضح "
     "(مثلا: حقوق الإقامة، لم الشمل، عقد الكراء...)."
+)
+
+KEYWORD_SYSTEM_PROMPT = (
+    "You are a Spanish legal search query generator for the BOE (Boletín "
+    "Oficial del Estado). The user will ask a question in any language "
+    "(often Moroccan Darija in Arabic script). Your only job is to output "
+    "2 or 3 PRECISE Spanish legal keywords or short noun phrases that will "
+    "maximize recall on https://www.boe.es search. "
+    "Rules:\n"
+    "- Output Spanish only.\n"
+    "- Prefer formal legal terminology (e.g. 'extranjería', 'reagrupación "
+    "familiar', 'permiso de residencia', 'arrendamiento urbano', 'contrato "
+    "de trabajo', 'Seguridad Social').\n"
+    "- 2 or 3 terms maximum, separated by a single space.\n"
+    "- No punctuation, no quotes, no explanations, no line breaks.\n"
+    "- If the question is generic, pick the most relevant umbrella term."
 )
 
 SYSTEM_PROMPT = (
@@ -64,6 +82,65 @@ SYSTEM_PROMPT = (
     "6) نظم الجواب: شرح قصير، ثم النقط المهمة، ثم نصيحة عملية.\n"
     "ممنوع تجاوب بأي لغة أخرى غير الدارجة المغربية بالحروف العربية."
 )
+
+
+# ---------------------------------------------------------------------------
+# Spanish keyword extraction (Step 1 of the RAG pipeline)
+# ---------------------------------------------------------------------------
+_ASCII_LETTER_RE = None  # set lazily to avoid importing re at module import
+
+
+def _sanitize_keywords(raw: str) -> str:
+    """Clean the LLM output into a BOE-friendly query string."""
+    if not raw:
+        return ""
+    # Strip newlines, quotes, and collapse whitespace.
+    cleaned = raw.replace("\n", " ").replace("\r", " ").strip().strip('"').strip("'")
+    # Remove trailing punctuation that BOE search doesn't like.
+    for ch in ".,;:!?":
+        cleaned = cleaned.replace(ch, " ")
+    tokens = [t for t in cleaned.split() if t]
+    # Keep at most 3 tokens (the prompt asked for 2-3 phrases, but we allow
+    # a small safety margin of 5 words in case it returns short phrases).
+    tokens = tokens[:5]
+    return " ".join(tokens)
+
+
+def _looks_like_spanish(text: str) -> bool:
+    """Cheap heuristic: at least one ASCII letter and no Arabic block chars."""
+    has_latin = any("a" <= c.lower() <= "z" for c in text)
+    has_arabic = any("\u0600" <= c <= "\u06FF" for c in text)
+    return has_latin and not has_arabic
+
+
+async def extract_spanish_keywords(question: str) -> str:
+    """
+    Use gpt-4o-mini to turn any-language input into 2-3 Spanish legal keywords.
+
+    Returns the fallback (the raw question) only if extraction fails; the
+    caller can still pass that to BOE, though results will be weaker.
+    """
+    try:
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.0,
+            max_tokens=24,
+            messages=[
+                {"role": "system", "content": KEYWORD_SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+            ],
+            timeout=KEYWORD_TIMEOUT,
+        )
+    except Exception as exc:
+        logger.warning("Keyword extraction failed: %s", exc)
+        return question
+
+    keywords = _sanitize_keywords(response.choices[0].message.content or "")
+    if not keywords or not _looks_like_spanish(keywords):
+        logger.info("Keyword extraction produced unusable output: %r", keywords)
+        return question
+    logger.info("Extracted Spanish keywords: %s", keywords)
+    return keywords
 
 
 # ---------------------------------------------------------------------------
@@ -229,30 +306,49 @@ async def ask(question: str):
         return {
             "answer": "كتب سؤالك عافاك باش نقدر نعاونك.",
             "sources": [],
+            "search_query": "",
         }
 
-    # 1. Retrieve BOE context with a hard time budget.
+    # 1. Extract Spanish legal keywords (fast, ~1.5s budget).
     try:
-        context, sources = await asyncio.wait_for(
-            retrieve_boe_context(question), timeout=BOE_SEARCH_TIMEOUT + BOE_DOC_TIMEOUT
+        search_query = await asyncio.wait_for(
+            extract_spanish_keywords(question), timeout=KEYWORD_TIMEOUT + 0.2
         )
     except asyncio.TimeoutError:
-        logger.warning("BOE retrieval exceeded global budget for query: %s", question)
+        logger.warning("Keyword extraction timed out for query: %s", question)
+        search_query = question  # graceful degradation
+
+    # 2. Retrieve BOE context using the Spanish keywords.
+    try:
+        context, sources = await asyncio.wait_for(
+            retrieve_boe_context(search_query),
+            timeout=BOE_SEARCH_TIMEOUT + BOE_DOC_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("BOE retrieval exceeded global budget for query: %s", search_query)
         context, sources = "", []
 
-    # 2. Generate the Darija answer, with a fallback if the LLM call fails.
+    # 3. Generate the Darija answer, with a fallback if the LLM call fails.
     try:
         answer = await asyncio.wait_for(
             generate_darija_answer(question, context), timeout=OPENAI_TIMEOUT + 1.0
         )
     except asyncio.TimeoutError:
         logger.warning("OpenAI generation timed out for query: %s", question)
-        return {"answer": FALLBACK_MESSAGE, "sources": sources}
+        return {
+            "answer": FALLBACK_MESSAGE,
+            "sources": sources,
+            "search_query": search_query,
+        }
     except Exception as exc:  # openai errors, network, etc.
         logger.exception("OpenAI generation failed: %s", exc)
-        return {"answer": FALLBACK_MESSAGE, "sources": sources}
+        return {
+            "answer": FALLBACK_MESSAGE,
+            "sources": sources,
+            "search_query": search_query,
+        }
 
-    return {"answer": answer, "sources": sources}
+    return {"answer": answer, "sources": sources, "search_query": search_query}
 
 
 @app.get("/api/index/health")
