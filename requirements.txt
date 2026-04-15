@@ -1,4 +1,5 @@
 fastapi
-openai
+openai>=1.30.0
+httpx>=0.27.0
 python-multipart
 uvicorn
