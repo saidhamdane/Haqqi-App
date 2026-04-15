@@ -18,7 +18,7 @@ logger = logging.getLogger("haqqi.rag")
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Haqqi RAG API", version="2.1.0")
+app = FastAPI(title="Haqqi RAG API", version="2.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,10 +38,10 @@ BOE_SEARCH_URL = "https://www.boe.es/buscar/ayudas/legislacion_xml.php"
 BOE_DOC_URL = "https://www.boe.es/diario_boe/xml.php"
 
 # Total upper bound well under Vercel's 10 second limit.
-# Stage budget: keywords (1.5) + search (2.0) + docs parallel (2.0) + final LLM (4.5)
+# Stage budget: keywords (1.5) + search (5.0) + docs parallel (2.0) + final LLM (4.0)
 KEYWORD_TIMEOUT = 1.5          # seconds, very tight for the extractor
-BOE_SEARCH_TIMEOUT = 2.0       # seconds
-BOE_DOC_TIMEOUT = 2.5          # seconds
+BOE_SEARCH_TIMEOUT = 5.0       # seconds — bumped per user request
+BOE_DOC_TIMEOUT = 2.5          # seconds (runs in parallel for all docs)
 OPENAI_TIMEOUT = 5.0           # seconds for the final Darija generation
 MAX_DOCS = 2                   # number of BOE documents to retrieve for context
 MAX_CONTEXT_CHARS = 6000       # hard cap on context length passed to the LLM
@@ -52,34 +52,62 @@ FALLBACK_MESSAGE = (
     "(مثلا: حقوق الإقامة، لم الشمل، عقد الكراء...)."
 )
 
+# Sentinel returned to the client whenever BOE produced zero usable docs.
+NO_LAW_FOUND_MESSAGE = (
+    "I couldn't find a specific law in the BOE database for this query."
+)
+
 KEYWORD_SYSTEM_PROMPT = (
-    "You are a Spanish legal search query generator for the BOE (Boletín "
-    "Oficial del Estado). The user will ask a question in any language "
-    "(often Moroccan Darija in Arabic script). Your only job is to output "
-    "2 or 3 PRECISE Spanish legal keywords or short noun phrases that will "
-    "maximize recall on https://www.boe.es search. "
-    "Rules:\n"
-    "- Output Spanish only.\n"
-    "- Prefer formal legal terminology (e.g. 'extranjería', 'reagrupación "
-    "familiar', 'permiso de residencia', 'arrendamiento urbano', 'contrato "
-    "de trabajo', 'Seguridad Social').\n"
+    "You are an expert Spanish-law search-query generator for the BOE "
+    "(Boletín Oficial del Estado). Users ask in any language — Moroccan "
+    "Darija, Arabic, French, English, Spanish — and often use slang, "
+    "colloquial words, or vague phrasing. Your ONLY job is to translate the "
+    "intent into 2-3 FORMAL Spanish legal search terms that will retrieve "
+    "the right law or royal decree from https://www.boe.es.\n\n"
+    "MANDATORY RULES:\n"
+    "- Output Spanish ONLY. Never Arabic, never English, never French.\n"
+    "- Always use the exact technical Spanish legal term, not a literal "
+    "  translation. Examples of correct mappings:\n"
+    "    • residence / الإقامة / carte de séjour → 'permiso de residencia' "
+    "or 'autorización de residencia'\n"
+    "    • family reunification / لم الشمل → 'reagrupación familiar'\n"
+    "    • rent contract / كراء → 'arrendamiento urbano' or 'Ley de "
+    "Arrendamientos Urbanos'\n"
+    "    • work contract / خدمة → 'contrato de trabajo' or 'Estatuto de los "
+    "Trabajadores'\n"
+    "    • dismissal / طرد من الخدمة → 'despido improcedente'\n"
+    "    • minimum wage / الأجر الأدنى → 'salario mínimo interprofesional'\n"
+    "    • social security / ضمان اجتماعي → 'Seguridad Social'\n"
+    "    • nationality / جنسية → 'nacionalidad española'\n"
+    "    • asylum / لجوء → 'protección internacional' or 'asilo'\n"
+    "    • divorce / طلاق → 'divorcio' or 'Código Civil divorcio'\n"
+    "    • driving license / رخصة السياقة → 'permiso de conducción'\n"
+    "    • taxes / ضرائب → 'Ley General Tributaria' or 'IRPF'\n"
+    "    • deportation / ترحيل → 'expulsión extranjero' or 'Ley de "
+    "Extranjería'\n"
+    "- If the question is about immigrants, add 'extranjería' when "
+    "appropriate.\n"
     "- 2 or 3 terms maximum, separated by a single space.\n"
-    "- No punctuation, no quotes, no explanations, no line breaks.\n"
-    "- If the question is generic, pick the most relevant umbrella term."
+    "- No punctuation, no quotes, no explanations, no line breaks, no "
+    "conjunctions like 'y', 'de', 'la' unless part of a legal name.\n"
+    "- If totally unclear, output the single best umbrella term "
+    "(e.g. 'extranjería' for immigrant life questions).\n"
+    "- Never output English, never refuse, never ask back. Just output the "
+    "terms."
 )
 
 SYSTEM_PROMPT = (
     "انت مساعد قانوني متخصص ف القانون الإسباني، كتخدم مع جالية المغاربة ف إسبانيا. "
     "كتستعمل نظام RAG: غادي نعطيك مقاطع رسمية من الجريدة الرسمية الإسبانية (BOE). "
-    "المهمة ديالك:\n"
+    "قواعد إجبارية:\n"
     "1) قرا المرجع القانوني بالإسبانية مزيان.\n"
-    "2) جاوب على السؤال ديال المستخدم **بالدارجة المغربية فقط وبالحروف العربية** "
-    "(ماشي فصحى وماشي حروف لاتينية).\n"
-    "3) كون دقيق قانونيا، وإيلا المرجع ما كافي قول بصراحة أنه خاص الإنسان يستشير محامي أو "
-    "الإدارة المختصة.\n"
-    "4) إيلا المرجع ما عندوش علاقة مباشرة بالسؤال، وضّح ذلك وعطي جواب عام مفيد بالدارجة.\n"
-    "5) ما تخترعش قوانين أو أرقام مواد إيلا ماكانتش ف المرجع.\n"
-    "6) نظم الجواب: شرح قصير، ثم النقط المهمة، ثم نصيحة عملية.\n"
+    "2) جاوب **بالدارجة المغربية فقط وبالحروف العربية** (ماشي فصحى، ماشي حروف لاتينية).\n"
+    "3) **واجب تذكر الـ BOE ID ولا رقم القانون/المرسوم** اللي خذيتي منو "
+    "المعلومة (مثلا: 'حسب BOE-A-2000-544' ولا 'حسب Ley Orgánica 4/2000').\n"
+    "4) اعتمد حصرياً على المرجع اللي عطيتك. ممنوع تخترع قوانين ولا أرقام مواد.\n"
+    "5) إيلا المرجع ما فيهش جواب دقيق على السؤال، قول بصراحة بأن المرجع "
+    "ما كيعطيش التفصيل الكافي ونصح يستشير محامي.\n"
+    "6) نظم الجواب: شرح قصير، النقط المهمة (مع الـ BOE ID)، ثم نصيحة عملية.\n"
     "ممنوع تجاوب بأي لغة أخرى غير الدارجة المغربية بالحروف العربية."
 )
 
@@ -205,17 +233,30 @@ async def _fetch_boe_document(
         return boe_id, ""
 
 
-async def retrieve_boe_context(query: str) -> Tuple[str, List[str]]:
+def _count_search_ids(xml_bytes: bytes) -> int:
+    """Count the total number of <id> entries in a BOE search XML response."""
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        return 0
+    return sum(1 for n in root.iter("id") if n.text and n.text.strip())
+
+
+async def retrieve_boe_context(query: str) -> Tuple[str, List[str], int]:
     """
     Retrieve relevant legal context from the BOE.
 
-    Returns (context_text, [boe_ids]). If BOE is unreachable or returns no
-    useful data, context_text will be an empty string.
+    Returns (context_text, [boe_ids_with_text], total_ids_found).
+    - total_ids_found is the number of <id> entries the BOE search returned,
+      regardless of whether we then managed to fetch their document body.
+    - context_text is empty when BOE is unreachable or no docs produced text.
     """
     sources: List[str] = []
+    total_found = 0
+
     async with httpx.AsyncClient(
         headers={
-            "User-Agent": "HaqqiApp/2.0 (+https://boe.es legal assistant)",
+            "User-Agent": "HaqqiApp/2.2 (+https://boe.es legal assistant)",
             "Accept": "application/xml,text/xml;q=0.9,*/*;q=0.8",
         },
         follow_redirects=True,
@@ -228,16 +269,27 @@ async def retrieve_boe_context(query: str) -> Tuple[str, List[str]]:
                 timeout=BOE_SEARCH_TIMEOUT,
             )
         except (httpx.TimeoutException, httpx.HTTPError) as exc:
-            logger.warning("BOE search request failed: %s", exc)
-            return "", sources
+            logger.warning("BOE search request failed for %r: %s", query, exc)
+            return "", sources, 0
 
         if search_res.status_code != 200:
-            logger.info("BOE search returned HTTP %s", search_res.status_code)
-            return "", sources
+            logger.info(
+                "BOE search returned HTTP %s for %r",
+                search_res.status_code,
+                query,
+            )
+            return "", sources, 0
 
+        total_found = _count_search_ids(search_res.content)
         ids = _parse_search_ids(search_res.content, limit=MAX_DOCS)
+        logger.info(
+            "BOE search for %r: total_found=%d, fetching=%d",
+            query,
+            total_found,
+            len(ids),
+        )
         if not ids:
-            return "", sources
+            return "", sources, total_found
 
         # 2. Fetch the top documents in parallel to save wall-clock time.
         results = await asyncio.gather(
@@ -261,28 +313,27 @@ async def retrieve_boe_context(query: str) -> Tuple[str, List[str]]:
         if total >= MAX_CONTEXT_CHARS:
             break
 
-    return "\n\n---\n\n".join(chunks)[:MAX_CONTEXT_CHARS], sources
+    return "\n\n---\n\n".join(chunks)[:MAX_CONTEXT_CHARS], sources, total_found
 
 
 # ---------------------------------------------------------------------------
 # LLM generation
 # ---------------------------------------------------------------------------
-async def generate_darija_answer(question: str, context: str) -> str:
-    """Call OpenAI to produce a Moroccan Darija answer grounded on BOE context."""
-    if context:
-        user_content = (
-            f"المرجع القانوني من BOE.es (بالإسبانية):\n{context}\n\n"
-            f"السؤال ديال المستخدم:\n{question}\n\n"
-            "جاوب بالدارجة المغربية بالحروف العربية فقط، "
-            "و اعتمد على المرجع اللي فوق."
-        )
-    else:
-        user_content = (
-            "ما لقيتش مرجع مباشر ف BOE.es على هاد السؤال.\n"
-            f"السؤال: {question}\n\n"
-            "عطي جواب عام مفيد بالدارجة المغربية بالحروف العربية، "
-            "ونصح المستخدم يتأكد من محامي أو الإدارة المختصة."
-        )
+async def generate_darija_answer(question: str, context: str, sources: List[str]) -> str:
+    """
+    Generate a Moroccan Darija answer grounded on BOE context.
+
+    Precondition: `context` is non-empty. Callers must handle the no-context
+    case themselves (typically by returning NO_LAW_FOUND_MESSAGE).
+    """
+    sources_hint = ", ".join(sources) if sources else "(ما كاين حتى BOE ID)"
+    user_content = (
+        f"المرجع القانوني من BOE.es (بالإسبانية):\n{context}\n\n"
+        f"الـ BOE IDs المتوفرة: {sources_hint}\n\n"
+        f"السؤال ديال المستخدم:\n{question}\n\n"
+        "جاوب بالدارجة المغربية بالحروف العربية فقط. "
+        "**واجب تذكر الـ BOE ID ولا رقم القانون** اللي جا منو الجواب."
+    )
 
     response = await openai_client.chat.completions.create(
         model="gpt-4o-mini",
@@ -307,6 +358,7 @@ async def ask(question: str):
             "answer": "كتب سؤالك عافاك باش نقدر نعاونك.",
             "sources": [],
             "search_query": "",
+            "debug": {"docs_found": 0, "docs_used": 0},
         }
 
     # 1. Extract Spanish legal keywords (fast, ~1.5s budget).
@@ -320,18 +372,42 @@ async def ask(question: str):
 
     # 2. Retrieve BOE context using the Spanish keywords.
     try:
-        context, sources = await asyncio.wait_for(
+        context, sources, docs_found = await asyncio.wait_for(
             retrieve_boe_context(search_query),
             timeout=BOE_SEARCH_TIMEOUT + BOE_DOC_TIMEOUT,
         )
     except asyncio.TimeoutError:
-        logger.warning("BOE retrieval exceeded global budget for query: %s", search_query)
-        context, sources = "", []
+        logger.warning(
+            "BOE retrieval exceeded global budget for query: %s", search_query
+        )
+        context, sources, docs_found = "", [], 0
 
-    # 3. Generate the Darija answer, with a fallback if the LLM call fails.
+    debug_payload = {
+        "docs_found": docs_found,      # total <id>s returned by BOE search
+        "docs_used": len(sources),     # how many actually had usable text
+    }
+
+    # 3a. No BOE data → return the exact sentinel. Do NOT let the LLM make
+    #     up a general answer, per product requirement.
+    if not context:
+        logger.info(
+            "No BOE context for query=%r search_query=%r (docs_found=%d)",
+            question,
+            search_query,
+            docs_found,
+        )
+        return {
+            "answer": NO_LAW_FOUND_MESSAGE,
+            "sources": sources,
+            "search_query": search_query,
+            "debug": debug_payload,
+        }
+
+    # 3b. BOE returned context → force the LLM to ground on it and cite BOE IDs.
     try:
         answer = await asyncio.wait_for(
-            generate_darija_answer(question, context), timeout=OPENAI_TIMEOUT + 1.0
+            generate_darija_answer(question, context, sources),
+            timeout=OPENAI_TIMEOUT + 1.0,
         )
     except asyncio.TimeoutError:
         logger.warning("OpenAI generation timed out for query: %s", question)
@@ -339,6 +415,7 @@ async def ask(question: str):
             "answer": FALLBACK_MESSAGE,
             "sources": sources,
             "search_query": search_query,
+            "debug": debug_payload,
         }
     except Exception as exc:  # openai errors, network, etc.
         logger.exception("OpenAI generation failed: %s", exc)
@@ -346,9 +423,15 @@ async def ask(question: str):
             "answer": FALLBACK_MESSAGE,
             "sources": sources,
             "search_query": search_query,
+            "debug": debug_payload,
         }
 
-    return {"answer": answer, "sources": sources, "search_query": search_query}
+    return {
+        "answer": answer,
+        "sources": sources,
+        "search_query": search_query,
+        "debug": debug_payload,
+    }
 
 
 @app.get("/api/index/health")
